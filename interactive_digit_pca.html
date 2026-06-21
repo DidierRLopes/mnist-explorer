@@ -1,0 +1,873 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MNIST-Style Digit PCA Explorer</title>
+  <style>
+    :root {
+      --bg: #f7f7f4;
+      --panel: #ffffff;
+      --ink: #202124;
+      --muted: #62666d;
+      --line: #d9d9d2;
+      --accent: #1f77b4;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .app {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 14px 18px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 650;
+      white-space: nowrap;
+    }
+
+    .controls {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-left: auto;
+    }
+
+    label {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    select,
+    button {
+      height: 34px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+      border-radius: 6px;
+      padding: 0 10px;
+      font: inherit;
+      font-size: 14px;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    button:hover,
+    select:hover {
+      border-color: #a8aaa6;
+    }
+
+    main {
+      display: grid;
+      grid-template-columns: 180px minmax(0, 1fr);
+      gap: 14px;
+      padding: 14px;
+      min-height: 0;
+      flex: 1;
+    }
+
+    main.selection-open {
+      grid-template-columns: 180px minmax(0, 1fr) 260px;
+    }
+
+    .plot-panel,
+    .side-panel,
+    .detail-panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      min-width: 0;
+    }
+
+    .plot-panel {
+      grid-column: 2;
+      grid-row: 1;
+      position: relative;
+      overflow: hidden;
+    }
+
+    #plot {
+      display: block;
+      width: 100%;
+      height: calc(100vh - 96px);
+      min-height: 560px;
+      background: #fbfbf9;
+      touch-action: none;
+      user-select: none;
+    }
+
+    .axis-label {
+      fill: var(--muted);
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .point-glyph {
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 700;
+      paint-order: stroke;
+      stroke: rgba(255, 255, 255, 0.88);
+      stroke-width: 0.7px;
+      transition: opacity 120ms ease;
+    }
+
+    .point-glyph.dimmed {
+      opacity: 0.18;
+    }
+
+    .point-glyph.selected {
+      stroke: #111;
+      stroke-width: 1.2px;
+      opacity: 1;
+    }
+
+    .point-glyph.neighbor {
+      stroke: #111;
+      stroke-width: 0.9px;
+      opacity: 1;
+    }
+
+    .point-hit {
+      cursor: pointer;
+    }
+
+    .side-panel,
+    .detail-panel {
+      grid-column: 1;
+      grid-row: 1;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      align-self: start;
+      max-height: calc(100vh - 96px);
+      overflow: auto;
+    }
+
+    .detail-panel {
+      grid-column: 3;
+      position: relative;
+    }
+
+    .detail-panel[hidden] {
+      display: none;
+    }
+
+    .detail-backdrop {
+      display: none;
+    }
+
+    .meta {
+      display: grid;
+      gap: 4px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.35;
+    }
+
+    .meta strong {
+      color: var(--ink);
+      font-size: 14px;
+    }
+
+    .source-link {
+      color: var(--accent);
+      text-decoration: none;
+      overflow-wrap: anywhere;
+    }
+
+    .source-link:hover {
+      text-decoration: underline;
+    }
+
+    .legend {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 6px;
+    }
+
+    .legend-item {
+      display: grid;
+      grid-template-columns: 12px 24px minmax(0, 1fr);
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      font-size: 12px;
+    }
+
+    .swatch {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      flex: 0 0 auto;
+    }
+
+    .glyph {
+      font-size: 17px;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .digit {
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .empty-state {
+      border: 1px dashed var(--line);
+      border-radius: 8px;
+      color: var(--muted);
+      font-size: 13px;
+      padding: 12px;
+    }
+
+    .selected-block {
+      display: grid;
+      gap: 8px;
+      justify-items: center;
+      padding-top: 18px;
+    }
+
+    .selected-title {
+      color: var(--ink);
+      font-size: 14px;
+      font-weight: 750;
+      line-height: 1.25;
+      text-align: center;
+      text-transform: uppercase;
+      overflow-wrap: anywhere;
+    }
+
+    .separator {
+      width: 100%;
+      border: 0;
+      border-top: 1px solid var(--line);
+      margin: 4px 0;
+    }
+
+    .detail-close {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      border-radius: 50%;
+      color: var(--muted);
+      font-size: 20px;
+      line-height: 1;
+    }
+
+    .detail-close:hover {
+      color: var(--ink);
+    }
+
+    .neighbor-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .pager {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .pager button {
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      line-height: 1;
+    }
+
+    .pager button:disabled {
+      cursor: default;
+      opacity: 0.4;
+    }
+
+    .page-label {
+      color: var(--muted);
+      font-size: 11px;
+      min-width: 72px;
+      text-align: center;
+    }
+
+    .neighbor-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .sample-entry {
+      display: grid;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .sample-heading {
+      color: var(--ink);
+      font-size: 12px;
+      font-weight: 650;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+
+    .sample-figure {
+      margin: 0;
+      display: grid;
+      gap: 4px;
+      justify-items: center;
+    }
+
+    .sample-image {
+      width: 64px;
+      height: 64px;
+      border: 3px solid var(--accent);
+      border-radius: 8px;
+      image-rendering: pixelated;
+      background: #050505;
+    }
+
+    .selected-image {
+      width: 92px;
+      height: 92px;
+      border-width: 4px;
+    }
+
+    .sample-caption {
+      font-size: 11px;
+      line-height: 1.2;
+      color: var(--muted);
+      text-align: center;
+      overflow-wrap: anywhere;
+    }
+
+    .section-title {
+      grid-column: 1 / -1;
+      margin: 0 0 2px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0;
+    }
+
+    @media (max-width: 850px) {
+      header {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .controls {
+        margin-left: 0;
+      }
+
+      main {
+        grid-template-columns: 1fr;
+      }
+
+      main.selection-open {
+        grid-template-columns: 1fr;
+      }
+
+      .plot-panel,
+      .side-panel {
+        grid-column: auto;
+        grid-row: auto;
+        max-height: none;
+      }
+
+      .detail-backdrop {
+        display: none;
+      }
+
+      main.selection-open .detail-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 10;
+        display: block;
+        background: rgba(25, 25, 25, 0.42);
+      }
+
+      .detail-panel {
+        position: fixed;
+        top: 18px;
+        right: 12px;
+        bottom: 18px;
+        left: 12px;
+        z-index: 11;
+        grid-column: auto;
+        grid-row: auto;
+        max-height: none;
+        width: auto;
+      }
+
+      #plot {
+        height: 68vh;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>MNIST-Style Digit PCA Explorer</h1>
+      <div class="controls">
+        <label for="languageSelect">Language</label>
+        <select id="languageSelect"></select>
+        <button id="resetZoom" type="button">Reset Zoom</button>
+      </div>
+    </header>
+
+    <main id="mainGrid">
+      <section class="plot-panel">
+        <svg id="plot" viewBox="0 0 1100 720" aria-label="Digit PCA chart">
+          <rect id="plotBackground" x="0" y="0" width="1100" height="720" fill="transparent"></rect>
+          <g id="gridLayer"></g>
+          <g id="pointLayer"></g>
+          <text class="axis-label" x="550" y="700" text-anchor="middle">PC1</text>
+          <text class="axis-label" x="20" y="360" text-anchor="middle" transform="rotate(-90 20 360)">PC2</text>
+        </svg>
+      </section>
+
+      <aside class="side-panel">
+        <div class="meta">
+          <strong id="languageName"></strong>
+          <span id="languageSource"></span>
+          <span id="sampleCount"></span>
+          <a id="datasetLink" class="source-link" href="#" target="_blank" rel="noreferrer">Dataset source</a>
+        </div>
+        <p class="section-title">Digit colors</p>
+        <div id="legend" class="legend"></div>
+      </aside>
+
+      <div id="detailBackdrop" class="detail-backdrop" hidden></div>
+      <aside id="detailPanel" class="detail-panel" aria-live="polite" hidden>
+        <button id="closeDetail" class="detail-close" type="button" aria-label="Close sample details">&times;</button>
+        <div class="selected-block">
+          <div id="selectedTitle" class="selected-title"></div>
+          <figure class="sample-figure">
+            <img id="selectedImage" class="sample-image selected-image" alt="Selected digit sample">
+            <figcaption id="selectedCaption" class="sample-caption"></figcaption>
+          </figure>
+        </div>
+        <hr class="separator">
+        <div class="neighbor-toolbar">
+          <p class="section-title">Neighbour</p>
+          <div class="pager">
+            <button id="prevNeighbors" type="button" aria-label="Previous closest samples">&lt;</button>
+            <span id="neighborPageLabel" class="page-label"></span>
+            <button id="nextNeighbors" type="button" aria-label="Next closest samples">&gt;</button>
+          </div>
+        </div>
+        <div id="neighborList" class="neighbor-list"></div>
+      </aside>
+    </main>
+  </div>
+
+  <script src="interactive_digit_pca_data.js"></script>
+  <script>
+    const DATA = window.DIGIT_PCA_DATA;
+    const SVG_NS = "http://www.w3.org/2000/svg";
+    const WIDTH = 1100;
+    const HEIGHT = 720;
+    const PADDING = { left: 58, right: 34, top: 34, bottom: 54 };
+    const NEIGHBORS_PER_PAGE = 5;
+    const SOURCE_URLS = {
+      "english": "https://www.openml.org/d/554",
+      "mandarin-chinese": "https://www.kaggle.com/datasets/gpreda/chinese-mnist",
+      "hindi": "https://www.kaggle.com/datasets/anurags397/hindi-mnist-data",
+      "arabic": "https://www.kaggle.com/datasets/mloey1/ahdd1",
+      "bengali": "https://www.kaggle.com/datasets/wchowdhu/bengali-digits",
+      "urdu-persian": "https://www.kaggle.com/datasets/teerathkumar142/urdumnist",
+      "telugu": "https://github.com/prabhuomkar/CMATERdb",
+    };
+
+    const mainGrid = document.getElementById("mainGrid");
+    const languageSelect = document.getElementById("languageSelect");
+    const languageName = document.getElementById("languageName");
+    const languageSource = document.getElementById("languageSource");
+    const sampleCount = document.getElementById("sampleCount");
+    const datasetLink = document.getElementById("datasetLink");
+    const legend = document.getElementById("legend");
+    const svg = document.getElementById("plot");
+    const pointLayer = document.getElementById("pointLayer");
+    const gridLayer = document.getElementById("gridLayer");
+    const resetZoomButton = document.getElementById("resetZoom");
+    const detailBackdrop = document.getElementById("detailBackdrop");
+    const detailPanel = document.getElementById("detailPanel");
+    const closeDetailButton = document.getElementById("closeDetail");
+    const selectedTitle = document.getElementById("selectedTitle");
+    const selectedImage = document.getElementById("selectedImage");
+    const selectedCaption = document.getElementById("selectedCaption");
+    const prevNeighborsButton = document.getElementById("prevNeighbors");
+    const nextNeighborsButton = document.getElementById("nextNeighbors");
+    const neighborPageLabel = document.getElementById("neighborPageLabel");
+    const neighborList = document.getElementById("neighborList");
+
+    let currentLanguage = DATA.languages[0];
+    let view = { x: 0, y: 0, w: WIDTH, h: HEIGHT };
+    let isPanning = false;
+    let panStart = null;
+    let panView = null;
+    let dragDistance = 0;
+    let pendingPointIndex = null;
+    let selectedIndex = null;
+    let selectedNeighbors = [];
+    let neighborPage = 0;
+
+    DATA.languages.forEach((language) => {
+      const option = document.createElement("option");
+      option.value = language.id;
+      option.textContent = language.name;
+      languageSelect.appendChild(option);
+    });
+
+    function colorForDigit(digit) {
+      return DATA.colors[digit];
+    }
+
+    function resetView() {
+      view = { x: 0, y: 0, w: WIDTH, h: HEIGHT };
+      applyViewBox();
+    }
+
+    function applyViewBox() {
+      svg.setAttribute("viewBox", `${view.x} ${view.y} ${view.w} ${view.h}`);
+    }
+
+    function dataBounds(points) {
+      const xs = points.map((point) => point[0]);
+      const ys = points.map((point) => point[1]);
+      const minX = Math.min(...xs);
+      const maxX = Math.max(...xs);
+      const minY = Math.min(...ys);
+      const maxY = Math.max(...ys);
+      const dx = Math.max(maxX - minX, 1e-6);
+      const dy = Math.max(maxY - minY, 1e-6);
+      return {
+        minX: minX - dx * 0.08,
+        maxX: maxX + dx * 0.08,
+        minY: minY - dy * 0.08,
+        maxY: maxY + dy * 0.08,
+      };
+    }
+
+    function project(point, bounds) {
+      const x = PADDING.left + ((point[0] - bounds.minX) / (bounds.maxX - bounds.minX)) * (WIDTH - PADDING.left - PADDING.right);
+      const y = HEIGHT - PADDING.bottom - ((point[1] - bounds.minY) / (bounds.maxY - bounds.minY)) * (HEIGHT - PADDING.top - PADDING.bottom);
+      return [x, y];
+    }
+
+    function renderGrid() {
+      gridLayer.replaceChildren();
+      for (let i = 0; i <= 10; i += 1) {
+        const x = PADDING.left + i * (WIDTH - PADDING.left - PADDING.right) / 10;
+        const y = PADDING.top + i * (HEIGHT - PADDING.top - PADDING.bottom) / 10;
+        const vertical = document.createElementNS(SVG_NS, "line");
+        vertical.setAttribute("x1", x);
+        vertical.setAttribute("x2", x);
+        vertical.setAttribute("y1", PADDING.top);
+        vertical.setAttribute("y2", HEIGHT - PADDING.bottom);
+        vertical.setAttribute("stroke", "#e3e3dd");
+        vertical.setAttribute("stroke-width", "1");
+        gridLayer.appendChild(vertical);
+
+        const horizontal = document.createElementNS(SVG_NS, "line");
+        horizontal.setAttribute("x1", PADDING.left);
+        horizontal.setAttribute("x2", WIDTH - PADDING.right);
+        horizontal.setAttribute("y1", y);
+        horizontal.setAttribute("y2", y);
+        horizontal.setAttribute("stroke", "#e3e3dd");
+        horizontal.setAttribute("stroke-width", "1");
+        gridLayer.appendChild(horizontal);
+      }
+    }
+
+    function renderLegend(language) {
+      legend.replaceChildren();
+      language.glyphs.forEach((glyph, digit) => {
+        const item = document.createElement("div");
+        item.className = "legend-item";
+        item.innerHTML = `
+          <span class="swatch" style="background:${colorForDigit(digit)}"></span>
+          <span class="glyph">${glyph}</span>
+          <span class="digit">${digit}</span>
+        `;
+        legend.appendChild(item);
+      });
+    }
+
+    function renderLanguage(languageId) {
+      currentLanguage = DATA.languages.find((language) => language.id === languageId) || DATA.languages[0];
+      languageName.textContent = currentLanguage.name;
+      languageSource.textContent = currentLanguage.source;
+      sampleCount.textContent = `${currentLanguage.points.length.toLocaleString()} plotted samples`;
+      datasetLink.href = SOURCE_URLS[currentLanguage.id] || "#";
+      renderLegend(currentLanguage);
+      resetSelection();
+      renderGrid();
+      pointLayer.replaceChildren();
+
+      const bounds = dataBounds(currentLanguage.points);
+      const fragment = document.createDocumentFragment();
+      currentLanguage.points.forEach((point, index) => {
+        const digit = point[2];
+        const [x, y] = project(point, bounds);
+        const group = document.createElementNS(SVG_NS, "g");
+        group.setAttribute("class", "point-hit");
+        group.setAttribute("data-index", index);
+
+        const hit = document.createElementNS(SVG_NS, "circle");
+        hit.setAttribute("cx", x);
+        hit.setAttribute("cy", y);
+        hit.setAttribute("r", "8");
+        hit.setAttribute("fill", "transparent");
+        hit.setAttribute("pointer-events", "all");
+
+        const text = document.createElementNS(SVG_NS, "text");
+        text.setAttribute("class", "point-glyph");
+        text.setAttribute("x", x);
+        text.setAttribute("y", y);
+        text.setAttribute("fill", colorForDigit(digit));
+        text.setAttribute("text-anchor", "middle");
+        text.setAttribute("dominant-baseline", "central");
+        text.setAttribute("data-index", index);
+        text.setAttribute("pointer-events", "none");
+        text.textContent = currentLanguage.glyphs[digit];
+        group.append(hit, text);
+        fragment.appendChild(group);
+      });
+      pointLayer.appendChild(fragment);
+      resetView();
+    }
+
+    function imageSrc(point) {
+      return `data:image/png;base64,${point[3]}`;
+    }
+
+    function digitLabel(digit) {
+      return `${currentLanguage.glyphs[digit]} (${digit})`;
+    }
+
+    function ordinal(value) {
+      const suffix = value % 100 >= 11 && value % 100 <= 13
+        ? "th"
+        : { 1: "st", 2: "nd", 3: "rd" }[value % 10] || "th";
+      return `${value}${suffix}`;
+    }
+
+    function sampleMarkup(point, index, rank, distance) {
+      const digit = point[2];
+      return `
+        <div class="sample-entry">
+          <div class="sample-heading">${ordinal(rank)} closest (dist ${distance.toFixed(3)}) - ${digitLabel(digit)}</div>
+          <figure class="sample-figure">
+            <img class="sample-image" alt="Digit ${digit} nearest sample" src="${imageSrc(point)}" style="border-color:${colorForDigit(digit)}">
+            <figcaption class="sample-caption">(sample #${index})</figcaption>
+          </figure>
+        </div>
+      `;
+    }
+
+    function resetSelection() {
+      selectedIndex = null;
+      selectedNeighbors = [];
+      neighborPage = 0;
+      mainGrid.classList.remove("selection-open");
+      detailBackdrop.hidden = true;
+      detailPanel.hidden = true;
+      selectedImage.removeAttribute("src");
+      selectedImage.removeAttribute("style");
+      selectedTitle.textContent = "";
+      selectedCaption.textContent = "";
+      neighborList.replaceChildren();
+      neighborPageLabel.textContent = "";
+      clearHighlights();
+    }
+
+    function clearHighlights() {
+      pointLayer.querySelectorAll(".point-glyph").forEach((node) => {
+        node.classList.remove("selected", "neighbor", "dimmed");
+      });
+    }
+
+    function highlightPoints(index, neighbors) {
+      clearHighlights();
+      pointLayer.querySelectorAll(".point-glyph").forEach((node) => node.classList.add("dimmed"));
+      const selected = pointLayer.querySelector(`.point-glyph[data-index="${index}"]`);
+      if (selected) {
+        selected.classList.remove("dimmed");
+        selected.classList.add("selected");
+      }
+      neighbors.forEach(([neighborIndex]) => {
+        const neighbor = pointLayer.querySelector(`.point-glyph[data-index="${neighborIndex}"]`);
+        if (neighbor) {
+          neighbor.classList.remove("dimmed");
+          neighbor.classList.add("neighbor");
+        }
+      });
+    }
+
+    function nearestNeighbors(index) {
+      const selected = currentLanguage.points[index];
+      return currentLanguage.points
+        .map((point, pointIndex) => {
+          if (pointIndex === index) return null;
+          const dx = point[0] - selected[0];
+          const dy = point[1] - selected[1];
+          return [pointIndex, Math.hypot(dx, dy)];
+        })
+        .filter(Boolean)
+        .sort((a, b) => a[1] - b[1]);
+    }
+
+    function renderNeighborPage() {
+      if (selectedIndex == null) return;
+      const pageCount = Math.max(1, Math.ceil(selectedNeighbors.length / NEIGHBORS_PER_PAGE));
+      neighborPage = Math.max(0, Math.min(neighborPage, pageCount - 1));
+      const start = neighborPage * NEIGHBORS_PER_PAGE;
+      const pageNeighbors = selectedNeighbors.slice(start, start + NEIGHBORS_PER_PAGE);
+
+      highlightPoints(selectedIndex, pageNeighbors);
+      neighborList.innerHTML = pageNeighbors
+        .map(([neighborIndex, distance], rank) =>
+          sampleMarkup(currentLanguage.points[neighborIndex], neighborIndex, start + rank + 1, distance)
+        )
+        .join("");
+
+      const end = Math.min(start + NEIGHBORS_PER_PAGE, selectedNeighbors.length);
+      neighborPageLabel.textContent = `${start + 1}-${end} of ${selectedNeighbors.length.toLocaleString()}`;
+      prevNeighborsButton.disabled = neighborPage === 0;
+      nextNeighborsButton.disabled = neighborPage >= pageCount - 1;
+    }
+
+    function showSelection(index) {
+      selectedIndex = index;
+      selectedNeighbors = nearestNeighbors(index);
+      neighborPage = 0;
+
+      const point = currentLanguage.points[index];
+      const digit = point[2];
+      const color = colorForDigit(digit);
+
+      mainGrid.classList.add("selection-open");
+      detailBackdrop.hidden = false;
+      detailPanel.hidden = false;
+      selectedImage.src = imageSrc(point);
+      selectedImage.style.borderColor = color;
+      selectedTitle.style.color = color;
+      selectedTitle.textContent = `SELECTED ${digitLabel(digit)}`;
+      selectedCaption.textContent = `(sample #${index})`;
+      renderNeighborPage();
+    }
+
+    function clientToSvg(event) {
+      const rect = svg.getBoundingClientRect();
+      return {
+        x: view.x + ((event.clientX - rect.left) / rect.width) * view.w,
+        y: view.y + ((event.clientY - rect.top) / rect.height) * view.h,
+      };
+    }
+
+    svg.addEventListener("wheel", (event) => {
+      event.preventDefault();
+      const pivot = clientToSvg(event);
+      const factor = event.deltaY > 0 ? 1.16 : 0.86;
+      const nextW = Math.max(80, Math.min(WIDTH * 8, view.w * factor));
+      const nextH = Math.max(52, Math.min(HEIGHT * 8, view.h * factor));
+      const scaleX = nextW / view.w;
+      const scaleY = nextH / view.h;
+      view = {
+        x: pivot.x - (pivot.x - view.x) * scaleX,
+        y: pivot.y - (pivot.y - view.y) * scaleY,
+        w: nextW,
+        h: nextH,
+      };
+      applyViewBox();
+    }, { passive: false });
+
+    svg.addEventListener("pointerdown", (event) => {
+      isPanning = true;
+      panStart = { x: event.clientX, y: event.clientY };
+      panView = { ...view };
+      dragDistance = 0;
+      const target = event.target.closest ? event.target.closest(".point-hit") : null;
+      pendingPointIndex = target ? Number(target.getAttribute("data-index")) : null;
+      svg.setPointerCapture(event.pointerId);
+    });
+
+    svg.addEventListener("pointermove", (event) => {
+      if (!isPanning) return;
+      const rect = svg.getBoundingClientRect();
+      const rawDx = event.clientX - panStart.x;
+      const rawDy = event.clientY - panStart.y;
+      dragDistance = Math.hypot(rawDx, rawDy);
+      const dx = (rawDx / rect.width) * panView.w;
+      const dy = (rawDy / rect.height) * panView.h;
+      view = {
+        ...panView,
+        x: panView.x - dx,
+        y: panView.y - dy,
+      };
+      applyViewBox();
+    });
+
+    svg.addEventListener("pointerup", (event) => {
+      isPanning = false;
+      svg.releasePointerCapture(event.pointerId);
+      if (pendingPointIndex !== null && dragDistance <= 4) {
+        showSelection(pendingPointIndex);
+      }
+      pendingPointIndex = null;
+    });
+
+    svg.addEventListener("pointerleave", () => {
+      isPanning = false;
+      pendingPointIndex = null;
+    });
+
+    languageSelect.addEventListener("change", () => renderLanguage(languageSelect.value));
+    resetZoomButton.addEventListener("click", resetView);
+    closeDetailButton.addEventListener("click", resetSelection);
+    detailBackdrop.addEventListener("click", resetSelection);
+    prevNeighborsButton.addEventListener("click", () => {
+      neighborPage -= 1;
+      renderNeighborPage();
+    });
+    nextNeighborsButton.addEventListener("click", () => {
+      neighborPage += 1;
+      renderNeighborPage();
+    });
+
+    renderLanguage(DATA.languages[0].id);
+  </script>
+</body>
+</html>
