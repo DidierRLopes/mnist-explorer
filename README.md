@@ -25,13 +25,27 @@ Each language is sampled to 250 examples per digit, for 2,500 plotted samples pe
 
 ## Use the explorer
 
-Open this file in a browser:
+Clone the repo and serve the folder locally:
+
+```bash
+git clone git@github.com:DidierRLopes/mnist-explorer.git
+cd mnist-explorer
+python3 -m http.server 8765 --bind 127.0.0.1
+```
+
+Then open:
+
+```text
+http://127.0.0.1:8765/interactive_digit_pca.html
+```
+
+The page lets you select a language, inspect the 2D PCA plot, click samples, and page through nearest neighbors. On mobile, sample details open as a modal.
+
+You can also open the HTML file directly if your browser allows local JavaScript files:
 
 ```text
 interactive_digit_pca.html
 ```
-
-The page lets you select a language, inspect the 2D PCA plot, click samples, and page through nearest neighbors. On mobile, sample details open as a modal.
 
 ## Rebuild the data
 
@@ -48,6 +62,8 @@ python generate_interactive_digit_pca_data.py
 ```
 
 The generator normalizes all datasets to bright digits on dark backgrounds, removes large gray background artifacts from image-folder datasets, filters unusable samples, recomputes PCA, and writes `interactive_digit_pca_data.js`.
+
+After regenerating the data, refresh `interactive_digit_pca.html` in the browser.
 
 ## Notes
 
