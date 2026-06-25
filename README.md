@@ -1,6 +1,8 @@
 # MNIST-Style Digit PCA Explorer
 
-Interactive PCA visualizations for real MNIST-style handwritten digit datasets across multiple numeral systems.
+Interactive PCA visualizations for real MNIST-style handwritten digit datasets across multiple numeral systems. Short demo [here](https://www.youtube.com/watch?v=yKWpzT3czzQ).
+
+<img width="3446" height="1734" alt="CleanShot 2026-06-22 at 09 13 20@2x" src="https://github.com/user-attachments/assets/e78691f4-d610-425e-bf68-d6c38fad1a6f" />
 
 ## What is included
 
